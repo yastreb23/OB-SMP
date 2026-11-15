@@ -32,10 +32,7 @@ jobs:
         shell: cmd
         run: |
           set OBSMP_VERSION=${{ steps.version.outputs.version }}
-          call build.bat || exit /b 1
-          rem The xOBSE entry points must be exported, from a 32-bit DLL.
-          dumpbin /nologo /headers build\OBSMPPhysics.dll | findstr /c:"machine (x86)" || exit /b 1
-          dumpbin /nologo /exports build\OBSMPPhysics.dll | findstr OBSEPlugin_ || exit /b 1
+          call build.bat
 
       - name: Package
         shell: pwsh

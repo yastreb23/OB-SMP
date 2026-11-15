@@ -42,4 +42,7 @@ cl %COMMON% /std:c++20 /W3 /wd4244 /wd4267 /wd4018 /wd4996 /permissive- /Zc:prep
 
 link /nologo /DLL /DEBUG /LTCG /OPT:REF /OPT:ICF /OUT:"%OUT%\OBSMPPhysics.dll" *.obj "%OUT%\bullet.lib" user32.lib || (popd & exit /b 1)
 popd
+rem The xOBSE entry points must be exported, from a 32-bit DLL.
+dumpbin /nologo /headers "%OUT%\OBSMPPhysics.dll" | findstr /c:"machine (x86)" >nul || (echo the DLL is not 32-bit & exit /b 1)
+dumpbin /nologo /exports "%OUT%\OBSMPPhysics.dll" | findstr OBSEPlugin_ || (echo the xOBSE entry points are not exported & exit /b 1)
 echo build ok
