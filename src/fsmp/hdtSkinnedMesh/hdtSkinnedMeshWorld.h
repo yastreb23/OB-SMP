@@ -1,0 +1,92 @@
+#pragma once
+
+#include "hdtSkinnedMeshSystem.h"
+#include "hdtSkyrimSystem.h"
+#include <BulletCollision/CollisionDispatch/btSimulationIslandManager.h>
+#include <BulletDynamics/Dynamics/btDiscreteDynamicsWorldMt.h>
+
+namespace hdt
+{
+	class SkinnedMeshWorld : protected btDiscreteDynamicsWorldMt
+	{
+	public:
+		SkinnedMeshWorld();
+		~SkinnedMeshWorld();
+
+		virtual void addSkinnedMeshSystem(SkinnedMeshSystem* system);
+		virtual void removeSkinnedMeshSystem(SkinnedMeshSystem* system);
+
+		// NV SMP Physics: off skips collision detection (a debugging switch in the menu).
+		bool m_collisionsEnabled = true;
+		// NV SMP Physics: the collision tests run on a frame's first step only; its later steps reuse those contacts,
+		// moved with their bodies (btPersistentManifold::refreshContactPoints).
+		bool m_collideOncePerFrame = false;
+
+		void updateConstraintsForBone(SkinnedMeshBone* bone);
+
+		int stepSimulation(btScalar remainingTimeStep, int maxSubSteps = 1,
+			btScalar fixedTimeStep = btScalar(1.) / btScalar(60.)) override;
+
+		btVector3& getWind() { return m_windSpeed; }
+		const btVector3& getWind() const { return m_windSpeed; }
+
+	protected:
+		std::vector<float> m_timeSteps;
+		bool m_reuseContacts = false;   // this step reuses the last step's contacts (m_collideOncePerFrame)
+		bool m_keepContacts = false;    // this step's contacts are kept for the next one
+		bool m_predictiveFreed = false;  // the last step's predictive contacts went with every manifold (solveConstraints)
+		// NV SMP Physics: each step, the contacts collision detection found, before the solver (solveConstraints): the
+		// bodies still have the speeds they came together at, for whoever wants them (impact sounds).
+		virtual void contactsFound() {}
+
+		void readTransform(float timeStep)
+		{
+			const size_t n = m_systems.size();
+			if (n == 0)
+				return;
+
+			m_timeSteps.resize(n);
+
+			// processSkeletonRoot must be ran synchronously to avoid race issues
+			for (size_t i = 0; i < n; ++i)
+				m_timeSteps[i] = m_systems[i]->prepareForRead(timeStep);
+
+			tbb::parallel_for(size_t{ 0 }, n, [this](size_t i) {
+				m_systems[i]->readTransform(m_timeSteps[i]);
+			});
+		}
+
+		void writeTransform()
+		{
+			for (int i = 0; i < m_systems.size(); ++i) m_systems[i]->writeTransform();
+		}
+
+		// New Vegas: a frame with no physics step (the physics runs at a fixed rate; a frame shorter than a step takes
+		// none): the bones are put back on their parents as last simulated, so the cloth follows the body.
+		void followTransform()
+		{
+			for (auto& s : m_systems)
+				for (auto& b : s->getBones()) b->followTransform();
+		}
+
+		void applyGravity() override;
+		void applyWind(btScalar timeStep);
+
+		void predictUnconstraintMotion(btScalar timeStep) override;
+		void integrateTransforms(btScalar timeStep) override;
+		// New Vegas: continuous collision as Bullet's predictive contacts only (see the .cpp).
+		void createPredictiveContacts(btScalar timeStep) override;
+		void performDiscreteCollisionDetection() override;
+		void calculateSimulationIslands() override;
+		void solveConstraints(btContactSolverInfo& solverInfo) override;
+
+		std::vector<RE::BSTSmartPointer<SkinnedMeshSystem>> m_systems;
+
+		btVector3 m_windSpeed;       // world windspeed
+		btScalar m_windTime = 0.0f;  // wind simulation clock
+
+	private:
+		std::vector<SkinnedMeshBody*> _bodies;
+		std::vector<SkinnedMeshShape*> _shapes;
+	};
+}

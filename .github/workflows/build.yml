@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  plugin:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bullet cache
+        uses: actions/cache@v4
+        with:
+          path: build/bullet.lib
+          key: bullet-${{ hashFiles('extern/bullet/**', 'build.bat') }}
+
+      - name: Build
+        shell: cmd
+        run: |
+          set OBSMP_VERSION=0.1.0-${{ github.run_number }}-%GITHUB_SHA:~0,7%
+          call build.bat
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $dst = "package/Data/OBSE/Plugins"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item build/OBSMPPhysics.dll $dst
+          Copy-Item resource/OBSMPPhysics.ini $dst
+          New-Item -ItemType Directory -Force -Path "package/pdb" | Out-Null
+          Copy-Item build/OBSMPPhysics.pdb package/pdb/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OBSMPPhysics-${{ github.run_number }}
+          path: package/
