@@ -20,8 +20,9 @@ Physics' system builder and physics world, and replaces the game layer with Obli
 
 ## Installing
 
-Get `OBSMPPhysics-<n>.zip` from the latest successful run under the repository's **Actions** tab (artifact), or
-from Releases once there are any. Install it with your mod manager, or copy its `Data` folder into the game folder.
+Get `OBSMPPhysics-<version>.zip` from [Releases](https://github.com/yastreb23/OB-SMP/releases) (test builds are
+pre-releases), or from a run under the repository's **Actions** tab (its artifact). Install it with your mod manager,
+or copy its `Data` folder into the game folder.
 That gives you `Data\OBSE\Plugins\OBSMPPhysics.dll` and `OBSMPPhysics.ini`. The log is `OBSMPPhysics.log` in the
 game folder (next to `Oblivion.exe`).
 
@@ -120,8 +121,9 @@ converting the XML's bone names) is planned.
 ## Building
 
 You need the Visual Studio 2022 C++ build tools (x86). Run `build.bat`, which produces `build\OBSMPPhysics.dll`.
-GitHub Actions builds every push (`.github/workflows/build.yml`) and uploads the DLL, the INI and the PDB as an
-artifact.
+GitHub Actions builds every push (`.github/workflows/build.yml`). It checks that the DLL is 32-bit and exports
+the xOBSE entry points, then uploads the zip (and the PDB) as an artifact. A pushed `v*` tag also publishes them
+as a pre-release.
 
 ## Licence
 

@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write   # tags publish a pre-release with the zip
+
 jobs:
   plugin:
     runs-on: windows-2022
@@ -17,11 +20,22 @@ jobs:
           path: build/bullet.lib
           key: bullet-${{ hashFiles('extern/bullet/**', 'build.bat') }}
 
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}".TrimStart("v") }
+          else { $v = "0.1.0-dev.${{ github.run_number }}+" + "${{ github.sha }}".Substring(0, 7) }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
       - name: Build
         shell: cmd
         run: |
-          set OBSMP_VERSION=0.1.0-${{ github.run_number }}-%GITHUB_SHA:~0,7%
-          call build.bat
+          set OBSMP_VERSION=${{ steps.version.outputs.version }}
+          call build.bat || exit /b 1
+          rem The xOBSE entry points must be exported, from a 32-bit DLL.
+          dumpbin /nologo /headers build\OBSMPPhysics.dll | findstr /c:"machine (x86)" || exit /b 1
+          dumpbin /nologo /exports build\OBSMPPhysics.dll | findstr OBSEPlugin_ || exit /b 1
 
       - name: Package
         shell: pwsh
@@ -30,10 +44,23 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
           Copy-Item build/OBSMPPhysics.dll $dst
           Copy-Item resource/OBSMPPhysics.ini $dst
-          New-Item -ItemType Directory -Force -Path "package/pdb" | Out-Null
-          Copy-Item build/OBSMPPhysics.pdb package/pdb/
+          Copy-Item README.md, LICENSE, EXCEPTIONS package/
+          Compress-Archive -Path package/* -DestinationPath "OBSMPPhysics-${{ steps.version.outputs.version }}.zip"
+          Compress-Archive -Path build/OBSMPPhysics.pdb -DestinationPath "OBSMPPhysics-${{ steps.version.outputs.version }}-pdb.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OBSMPPhysics-${{ github.run_number }}
-          path: package/
+          name: OBSMPPhysics-${{ steps.version.outputs.version }}
+          path: |
+            OBSMPPhysics-*.zip
+
+      - name: Pre-release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --prerelease `
+            --title "OB SMP Physics ${{ steps.version.outputs.version }} (test build)" `
+            --notes "Test build. Install: copy the zip's Data folder into the game folder (or install the zip with a mod manager). Needs xOBSE and Oblivion 1.2.0.416. Please send OBSMPPhysics.log from the game folder. The -pdb zip is only for reading crash offsets." `
+            OBSMPPhysics-*.zip
