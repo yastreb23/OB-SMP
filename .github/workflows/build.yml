@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a pre-release with this tag (e.g. v0.1.0-test.1); empty: build only"
+        required: false
+        default: ""
 
 permissions:
   contents: write   # tags publish a pre-release with the zip
@@ -24,7 +29,9 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}".TrimStart("v") }
+          $tag = "${{ github.event.inputs.release_tag }}"
+          if ($tag) { $v = $tag.TrimStart("v") }
+          elseif ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}".TrimStart("v") }
           else { $v = "0.1.0-dev.${{ github.run_number }}+" + "${{ github.sha }}".Substring(0, 7) }
           "version=$v" >> $env:GITHUB_OUTPUT
 
@@ -52,12 +59,14 @@ jobs:
             OBSMPPhysics-*.zip
 
       - name: Pre-release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event.inputs.release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --prerelease `
+          $tag = "${{ github.event.inputs.release_tag }}"
+          if (-not $tag) { $tag = "${{ github.ref_name }}" }
+          gh release create "$tag" --repo "${{ github.repository }}" --target "${{ github.sha }}" --prerelease `
             --title "OB SMP Physics ${{ steps.version.outputs.version }} (test build)" `
             --notes "Test build. Install: copy the zip's Data folder into the game folder (or install the zip with a mod manager). Needs xOBSE and Oblivion 1.2.0.416. Please send OBSMPPhysics.log from the game folder. The -pdb zip is only for reading crash offsets." `
             OBSMPPhysics-*.zip
